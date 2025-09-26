@@ -18,7 +18,10 @@ from typing import Any, Dict
 import numpy as np
 import websockets
 
-from .controller_state import ControllerState, LEFT_CONTROLLER, RIGHT_CONTROLLER
+try:  # 优先包内导入
+    from .controller_state import ControllerState, LEFT_CONTROLLER, RIGHT_CONTROLLER
+except ImportError:  # pragma: no cover - 兼容直接脚本运行
+    from controller_state import ControllerState, LEFT_CONTROLLER, RIGHT_CONTROLLER
 
 logger = logging.getLogger(__name__)
 
@@ -146,26 +149,26 @@ async def _handle_controller(controller: ControllerState, payload: Dict[str, Any
     return _to_goal(controller, relative, z_rot, x_rot)
 
 
-async def _process_message(message: str, scale: float) -> None:
+async def _process_message(message: str, scale: float, allowed_hands: set[str]) -> None:
     """解析 WebSocket 收到的 JSON 字符串，并打印控制目标。"""
 
     data = json.loads(message)
 
     if "leftController" in data or "rightController" in data:
-        if left := data.get("leftController"):
+        if "left" in allowed_hands and (left := data.get("leftController")):
             goal = await _handle_controller(LEFT_CONTROLLER, left, scale)
             if goal:
                 print(goal)
-        if right := data.get("rightController"):
+        if "right" in allowed_hands and (right := data.get("rightController")):
             goal = await _handle_controller(RIGHT_CONTROLLER, right, scale)
             if goal:
                 print(goal)
         return
 
     hand = data.get("hand")
-    if hand == "left":
+    if hand == "left" and "left" in allowed_hands:
         controller = LEFT_CONTROLLER
-    elif hand == "right":
+    elif hand == "right" and "right" in allowed_hands:
         controller = RIGHT_CONTROLLER
     else:
         return
@@ -175,7 +178,7 @@ async def _process_message(message: str, scale: float) -> None:
         print(goal)
 
 
-async def run_server(host: str, port: int, scale: float) -> None:
+async def run_server(host: str, port: int, scale: float, allowed_hands: set[str]) -> None:
     """启动异步 WebSocket 服务并等待终止信号。"""
 
     async def handler(websocket, _path=None):
@@ -183,7 +186,7 @@ async def run_server(host: str, port: int, scale: float) -> None:
         logger.info("Client connected: %s", websocket.remote_address)
         try:
             async for message in websocket:
-                await _process_message(message, scale)
+                await _process_message(message, scale, allowed_hands)
         except websockets.exceptions.ConnectionClosed:
             logger.info("Client disconnected: %s", websocket.remote_address)
         finally:
@@ -191,7 +194,13 @@ async def run_server(host: str, port: int, scale: float) -> None:
             RIGHT_CONTROLLER.reset_grip()
 
     server = await websockets.serve(handler, host, port)
-    logger.info("VR debug server listening on ws://%s:%s", host, port)
+    if allowed_hands == {"left", "right"}:
+        hands_label = "双手柄"
+    elif "left" in allowed_hands:
+        hands_label = "左手柄"
+    else:
+        hands_label = "右手柄"
+    logger.info("VR debug server listening on ws://%s:%s (mode: %s)", host, port, hands_label)
 
     stop_event = asyncio.Event()
 
@@ -215,11 +224,22 @@ def run_vr_controller_stream() -> None:
     parser.add_argument("--port", type=int, default=8442)
     parser.add_argument("--scale", type=float, default=1.0)
     parser.add_argument("--log-level", default="info")
+    parser.add_argument(
+        "--hands",
+        choices=["both", "left", "right"],
+        default="both",
+        help="选择姿态数据来源：双手柄或仅跟踪单侧手柄。",
+    )
 
     args = parser.parse_args()
     logging.basicConfig(level=getattr(logging, args.log_level.upper()))
 
-    asyncio.run(run_server(args.host, args.port, args.scale))
+    if args.hands == "both":
+        allowed_hands = {"left", "right"}
+    else:
+        allowed_hands = {args.hands}
+
+    asyncio.run(run_server(args.host, args.port, args.scale, allowed_hands))
 
 
 if __name__ == "__main__":

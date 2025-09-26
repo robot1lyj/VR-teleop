@@ -25,11 +25,26 @@
     const connectBtn = document.getElementById('connectBtn');
     const startBtn = document.getElementById('startBtn');
     const sceneNode = document.getElementById('vrScene');
+    const handModeButtons = Array.from(document.querySelectorAll('[data-hand-mode]'));
 
     let sceneReady = false;
     let sceneEl = null;
     let trackingActive = false;
     let xrSession = null;
+    let desiredHandMode = 'both';
+    let lastLoggedHandMode = null;
+
+    const handModeLabel = {
+      both: '双手柄',
+      left: '仅左手柄',
+      right: '仅右手柄',
+    };
+
+    handModeButtons.forEach((btn) => {
+      if (btn.classList.contains('hand-toggle__btn--active') && btn.dataset.handMode) {
+        desiredHandMode = btn.dataset.handMode;
+      }
+    });
 
     const host = window.location.hostname || 'localhost';
     wsInput.value = `ws://${host}:${DEFAULT_PORT}`;
@@ -46,6 +61,44 @@
       trackingActive = next;
       updateTrackingButton();
     };
+
+    const syncHandButtons = (mode) => {
+      handModeButtons.forEach((btn) => {
+        const targetMode = btn.dataset.handMode;
+        const isActive = targetMode === mode;
+        btn.classList.toggle('hand-toggle__btn--active', isActive);
+        btn.setAttribute('aria-pressed', isActive ? 'true' : 'false');
+      });
+    };
+
+    const applyHandMode = (mode, logChange = true) => {
+      if (mode !== 'left' && mode !== 'right' && mode !== 'both') {
+        mode = 'both';
+      }
+
+      desiredHandMode = mode;
+
+      if (sceneReady && sceneEl) {
+        sceneEl.setAttribute('controller-stream', 'hands', mode);
+      }
+
+      if (logChange && mode !== lastLoggedHandMode) {
+        appendLog(`🎮 姿态追踪模式：${handModeLabel[mode]}`);
+        lastLoggedHandMode = mode;
+      }
+
+      syncHandButtons(mode);
+    };
+
+    if (handModeButtons.length) {
+      handModeButtons.forEach((btn) => {
+        btn.addEventListener('click', () => {
+          applyHandMode(btn.dataset.handMode, true);
+        });
+      });
+    }
+
+    applyHandMode(desiredHandMode, false);
 
     const stopTracking = async (origin = 'button') => {
       if (!trackingActive && !xrSession) {
@@ -106,6 +159,7 @@
       sceneEl = el;
       appendLog('✅ VR 场景已初始化');
       setTrackingState(typeof sceneEl?.is === 'function' ? sceneEl.is('vr-mode') : false);
+      applyHandMode(desiredHandMode, true);
 
       sceneEl.addEventListener('enter-vr', () => {
         setTrackingState(true);

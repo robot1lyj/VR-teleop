@@ -67,6 +67,13 @@ label {
   text-transform: uppercase;
 }
 
+.label-inline {
+  text-transform: none;
+  letter-spacing: 0.02em;
+  color: var(--text);
+  font-weight: 600;
+}
+
 input[type="text"] {
   flex: 1;
   padding: 10px 14px;
@@ -76,6 +83,37 @@ input[type="text"] {
   color: var(--text);
   font-size: 15px;
   outline: none;
+}
+
+.hand-toggle {
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.hand-toggle__group {
+  display: flex;
+  gap: 8px;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.hand-toggle__btn {
+  background: rgba(15, 23, 42, 0.6);
+  color: var(--text);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.hand-toggle__btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 10px 20px rgba(56, 189, 248, 0.15);
+}
+
+.hand-toggle__btn--active {
+  background: var(--accent);
+  color: #0f172a;
+  box-shadow: 0 10px 20px rgba(56, 189, 248, 0.35);
 }
 
 button {

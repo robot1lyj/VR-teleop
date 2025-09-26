@@ -118,6 +118,7 @@
     schema: {
       interval: { type: 'number', default: 20 }, // ≈50Hz，满足遥操作刷新率
       scale: { type: 'number', default: 1.0 },
+      hands: { type: 'string', default: 'both' },
     },
 
     init() {
@@ -152,6 +153,15 @@
       let hasData = false;
       let exitIntent = false;
 
+      const rawMode = this.data.hands;
+      const mode = rawMode === 'left' || rawMode === 'right' ? rawMode : 'both';
+      const shouldSend = (handKey) => {
+        if (mode === 'both') {
+          return true;
+        }
+        return mode === handKey;
+      };
+
       const processController = (controllerEl, handKey) => {
         if (!controllerEl || !controllerEl.object3D.visible) {
           return null;
@@ -175,8 +185,8 @@
         };
       };
 
-      const leftState = processController(this.left, 'left');
-      const rightState = processController(this.right, 'right');
+      const leftState = shouldSend('left') ? processController(this.left, 'left') : null;
+      const rightState = shouldSend('right') ? processController(this.right, 'right') : null;
 
       if (leftState) {
         payload.leftController = leftState;

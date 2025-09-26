@@ -46,11 +46,24 @@ telegrip/vr_new/
 
 ```bash
 # 启动 VR 调试服务器（明文 ws://，最精简）
-python -m telegrip.vr_new.controller_stream --host 0.0.0.0 --port 8442
+python -m controller_stream --host 0.0.0.0 --port 8442
 
-# 在另一终端启动静态页面服务（指向 vr_new/web-ui）
-python -m http.server 8080 --directory telegrip/vr_new/web-ui
+# 仅跟踪单侧手柄（left/right），默认双手柄
+python -m controller_stream --hands left
+
+# 在另一终端启动静态页面服务（指向 web-ui）
+python -m http.server 8080 --directory web-ui
 ```
+
+如果你把当前目录部署在 `telegrip/vr_new/` 之下，也可以保持包结构一致：
+
+```bash
+export PYTHONPATH=/path/to/telegrip
+python -m telegrip.vr_new.controller_stream --host 0.0.0.0 --port 8442
+```
+
+若看到 `ModuleNotFoundError: No module named 'VR_teleop'`，请确认使用的模块前缀已经更新为
+`controller_stream` 或 `telegrip.vr_new.controller_stream`，旧的 `VR_teleop` 名称已移除。
 
 执行上述命令后，在浏览器或头显访问 `http://<主机IP>:8080/index.html`，
 在页面输入框中填写 `ws://<主机IP>:8442` 并点击「连接」，再按「开启手柄追踪」

@@ -29,6 +29,14 @@
           <button id="startBtn" type="button">开启手柄追踪</button>
           <span id="status" class="status status--idle">未连接</span>
         </div>
+        <div class="panel__row panel__row--start hand-toggle">
+          <span class="label-inline">追踪模式</span>
+          <div class="hand-toggle__group">
+            <button type="button" class="hand-toggle__btn hand-toggle__btn--active" data-hand-mode="both">双手柄</button>
+            <button type="button" class="hand-toggle__btn" data-hand-mode="left">单臂（左）</button>
+            <button type="button" class="hand-toggle__btn" data-hand-mode="right">单臂（右）</button>
+          </div>
+        </div>
       </section>
 
       <section class="panel__section">
