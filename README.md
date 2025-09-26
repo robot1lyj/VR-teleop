@@ -33,6 +33,7 @@ telegrip/vr_new/
   - 启动一个基于 `websockets` 的 `ws://` 服务，直接打印解析后的控制指令。
   - 收到手柄数据后，调用 `_handle_controller()` 输出包含 `target_position`、`wrist_roll_deg`、`wrist_flex_deg` 等字段的控制指令，方便独立调试。
   - 可通过命令行参数调整监听地址、端口、缩放系数以及日志级别。
+  - ![image-20250926170659175](https://raw.githubusercontent.com/robot1lyj/image_typora/main/image-20250926170659175.png)
 
 ## 通信说明
 
@@ -54,16 +55,6 @@ python -m controller_stream --hands left
 # 在另一终端启动静态页面服务（指向 web-ui）
 python -m http.server 8080 --directory web-ui
 ```
-
-如果你把当前目录部署在 `telegrip/vr_new/` 之下，也可以保持包结构一致：
-
-```bash
-export PYTHONPATH=/path/to/telegrip
-python -m telegrip.vr_new.controller_stream --host 0.0.0.0 --port 8442
-```
-
-若看到 `ModuleNotFoundError: No module named 'VR_teleop'`，请确认使用的模块前缀已经更新为
-`controller_stream` 或 `telegrip.vr_new.controller_stream`，旧的 `VR_teleop` 名称已移除。
 
 执行上述命令后，在浏览器或头显访问 `http://<主机IP>:8080/index.html`，
 在页面输入框中填写 `ws://<主机IP>:8442` 并点击「连接」，再按「开启手柄追踪」
