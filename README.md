@@ -1,61 +1,85 @@
-# VR-New 模块架构概述
+# VR-New 模块概览（WebRTC 版）
 
 ```
-telegrip/vr_new/
-├── __init__.py
+├── __init__.py                # 暴露 run_vr_controller_stream 入口
 ├── controller_state.py        # 单手柄状态结构，记录握持/扳机/姿态等信息
-├── controller_stream.py       # 独立 WebSocket 服务入口，解析手柄消息并打印目标指令
-├── web-ui/                    # 面向 VR 的简洁前端，可独立打包
-│   ├── index.html             # 极简页面：Ws 连接输入 + 状态日志 + A‑Frame 场景
-│   ├── interface.js           # 负责 UI 交互、日志显示
-│   ├── styles.css             # 深色主题样式
-│   └── vr_app.js              # 注册 A‑Frame 组件、采集手柄数据
-└── README.md                  # 本文档
+├── controller_stream.py       # WebRTC 信令入口，封装姿态处理管线与 CLI
+├── webrtc_endpoint.py         # WebSocket 信令 + aiortc DataChannel 服务端
+└── web-ui/                    # 浏览器侧 A-Frame 客户端
+    ├── index.html             # 信令地址输入、状态显示、A-Frame 场景
+    ├── interface.js           # UI 交互与日志面板
+    ├── styles.css             # 深色主题样式
+    └── vr_app.js              # WebRTCBridge 与手柄数据采集
 ```
 
-## 数据流示意
+## 数据流
 
 ```
-  VR 头显 / 浏览器 (web-ui/vr_app.js)
-        │  WebSocket(JSON, 含位置/四元数/握持状态)
+  浏览器 / 头显 (web-ui/vr_app.js)
+        │ 信令：WebSocket (offer/answer/ICE)
+        │ 数据：WebRTC DataChannel(JSON，姿态 50 Hz)
         ▼
-  controller_stream.py
-        │  解析消息 → 更新 ControllerState → 生成控制目标字典
+  controller_stream.py + webrtc_endpoint.py
+        │ ControllerPipeline 解析 -> 更新 ControllerState
         ▼
-      标准输出 / 自定义回调
+      标准输出 / 后续机器人控制模块
 ```
 
-- `controller_state.py`：
-  - 为每个手柄维护一次握持的起点位置与四元数，并计算相对旋转（Z / X 轴）。
-  - 提供 `reset_grip()` 用于断开或松开握持后的状态清理。
+- `ControllerPipeline` 将左/右手柄的位移、四元数转换为目标字典（位置、腕部角度、夹爪状态），方便单元测试复用。
+- `VRWebRTCServer` 单客户端模式：保留现有 WebSocket 端口，仅承担信令交换；姿态数据通过名为 `controller` 的 DataChannel 传输。
+- `web-ui/vr_app.js` 中的 `WebRTCBridge` 负责创建 `RTCPeerConnection`、管理 DataChannel 并以 20 ms（≈50 Hz）节奏发送手柄姿态。
 
-- `controller_stream.py`：
-  - 启动一个基于 `websockets` 的 `ws://` 服务，直接打印解析后的控制指令。
-  - 收到手柄数据后，调用 `_handle_controller()` 输出包含 `target_position`、`wrist_roll_deg`、`wrist_flex_deg` 等字段的控制指令，方便独立调试。
-  - 可通过命令行参数调整监听地址、端口、缩放系数以及日志级别。
-  - ![image-20250926170659175](https://raw.githubusercontent.com/robot1lyj/image_typora/main/image-20250926170659175.png)
+## 局域网快速上手
 
-## 通信说明
+1. **安装依赖**（仅需一次）：
+   ```bash
+   pip install aiortc websockets numpy
+   ```
+   若使用 Conda 环境，请先激活目标环境。
 
-- 默认使用明文 `ws://`，避免 TLS 开销以提升遥操作响应。当前目录不再附带证书文件。
-- 如需在受限环境下切换 `wss://`，可以自行生成证书并在启动 `websockets.serve()` 时传入。
-- 浏览器侧 `controller-stream` 组件默认 20ms（≈50Hz）发送一次握持状态，可在 HTML 中通过 `controller-stream="interval: 20"` 自定义。
-- 页面上的「开启手柄追踪」按钮会在 VR 会话建立后变成「停止手柄追踪」，可随时退出。
-- Quest 手柄长按 A/B（或 X/Y）键约 1 秒，也可以直接请求退出手柄追踪。
+2. **启动信令 + DataChannel 服务**（局域网可关闭 STUN）：
+   ```bash
+   PYTHONPATH=. python -m controller_stream \
+     --host 0.0.0.0 \
+     --port 8442 \
+     --no-stun \
+     --log-level info
+   ```
+   - 默认同时追踪双手柄，可用 `--hands left` 或 `--hands right` 仅启用单侧。
+   - 如遇到 NAT 导致协商失败，再追加 `--stun stun:stun.l.google.com:19302`。
 
-## 常用命令
+3. **启动前端界面**（本地文件即可）：
+   ```bash
+   python -m http.server 8080 --directory web-ui
+   ```
 
-```bash
-# 启动 VR 调试服务器（明文 ws://，最精简）
-python -m controller_stream --host 0.0.0.0 --port 8442
+4. **在浏览器 / 头显中操作**：
+   - 访问 `http://<服务器IP>:8080`。
+   - 在输入框填写 `ws://<服务器IP>:8442`，点击「连接」。
+   - 成功建立 DataChannel 后点击「开启手柄追踪」，允许浏览器进入 VR/AR 模式。
+   - 手柄长按侧键或页面按钮可随时停止追踪；终端会实时打印目标字典。
 
-# 仅跟踪单侧手柄（left/right），默认双手柄
-python -m controller_stream --hands left
 
-# 在另一终端启动静态页面服务（指向 web-ui）
-python -m http.server 8080 --directory web-ui
-```
 
-执行上述命令后，在浏览器或头显访问 `http://<主机IP>:8080/index.html`，
-在页面输入框中填写 `ws://<主机IP>:8442` 并点击「连接」，再按「开启手柄追踪」
-进入 VR/AR 会话。面板会实时展示 WebSocket 状态与最新日志，终端则输出解析后的控制目标。
+![image-20250928145800282](https://raw.githubusercontent.com/robot1lyj/image_typora/main/image-20250928145800282.png)
+
+## CLI 选项速查
+
+| 参数 | 说明 |
+| ---- | ---- |
+| `--host` / `--port` | WebSocket 信令监听地址与端口（默认 `0.0.0.0:8442`）。 |
+| `--hands` | `both` / `left` / `right`，限制 ControllerPipeline 处理的手柄。 |
+| `--scale` | 位移缩放系数，影响 `target_position`。 |
+| `--channel-name` | DataChannel 名称，需与前端 `WebRTCBridge` 中一致。 |
+| `--no-stun` | 只使用局域网 host-candidate（默认行为）。 |
+| `--stun URL` | 追加可选 STUN 服务器；可重复指定多个 URL。 |
+| `--log-level` | Python 日志等级，如 `debug` / `info`。 |
+
+## 调试建议（局域网）
+
+- **观察终端输出**：每条 DataChannel 消息触发的目标字典会打印到标准输出，可直接验证姿态解算是否正确。
+- **浏览器日志**：`web-ui` 页面左侧日志实时显示信令协商、DataChannel 状态和错误信息。
+- **断线重连**：若连接状态变为 `disconnected`/`failed`，前端会自动重新协商；必要时刷新页面即可恢复。
+- **纯脚本测试**：可以通过 `python - <<'PY'` 直接构造 `ControllerPipeline` 并注入样例 payload，便于单元级验证。
+
+> 当前方案专为局域网场景设计，默认不启用 TLS/证书，也不提供多客户端抢占逻辑。如需互联网部署或并发接入，可在此基础上扩展。 
